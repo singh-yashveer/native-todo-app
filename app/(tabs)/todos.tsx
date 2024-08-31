@@ -1,45 +1,72 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { ContainerStyles } from "@/styles/commonStyles";
 import { ThemedTextInput } from "@/components/TextInput";
 import { ThemedButton } from "@/components/ThemedButton";
-import { FlatList, View } from "react-native";
-import { FontAwesome } from "@expo/vector-icons";
-import { Colors } from "@/constants/Colors";
+import { FlatList, ActivityIndicator, View } from "react-native";
+import { loadTasks, saveTasks } from "@/services/storage";
+import TaskItem from "@/components/TaskItem";
+import { useFocusEffect } from "expo-router";
 
-const Todos = () => {
+const Tasks = () => {
   const [todo, setTodo] = useState<string>("");
-  const [tasks, setTasks] = useState<{ id: string; title: string }[]>([]);
+  const [tasks, setTasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  function addTask() {
-    if (todo.trim().length > 0) {
+  const fetchTasks = async () => {
+    setLoading(true);
+    const loadedTasks = await loadTasks();
+    setTasks(loadedTasks);
+    setLoading(false);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTasks();
+    }, [])
+  );
+
+  useEffect(() => {
+    if (!loading) saveTasks(tasks);
+  }, [tasks]);
+
+  const addTask = () => {
+    if (todo.trim()) {
+      setLoading(true);
       if (editingTaskId) {
         setTasks(tasks.map((task) => (task.id === editingTaskId ? { ...task, title: todo } : task)));
-        setEditingTaskId(null); // Reset after updating
+        setEditingTaskId(null);
       } else {
-        setTasks([...tasks, { id: String(tasks.length + 1), title: todo }]);
+        setTasks([...tasks, { id: String(tasks.length + 1), title: todo, completed: false }]);
       }
+      setLoading(false);
       setTodo("");
     }
-  }
+  };
 
-  function removeTask(id: string) {
+  const removeTask = async (id: string) => {
+    setLoading(true);
     setTasks(tasks.filter((task) => task.id !== id));
     if (editingTaskId === id) {
-      setEditingTaskId(null); // Reset if deleting the task being edited
+      setEditingTaskId(null);
       setTodo("");
     }
-  }
+    setLoading(false);
+  };
 
-  function updateTask(id: string) {
+  const updateTask = (id: string) => {
     const task = tasks.find((task) => task.id === id);
     if (task) {
-      setTodo(task.title); // Set the task title in the input for editing
-      setEditingTaskId(id); // Set the editing task ID
+      setTodo(task.title);
+      setEditingTaskId(id);
     }
-  }
+  };
+
+  const toggleTaskCompletion = (id: string) => {
+    setTasks(tasks.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task)));
+  };
 
   return (
     <ThemedView
@@ -48,7 +75,7 @@ const Todos = () => {
         padding: 20,
       }}
     >
-      <ThemedText className="mb-4" type="subtitle">
+      <ThemedText className="my-6" type="title">
         Tasks
       </ThemedText>
       <ThemedTextInput
@@ -59,52 +86,28 @@ const Todos = () => {
           setTodo(event.nativeEvent.text);
         }}
       />
-
       <ThemedButton className="my-4 w-full" variant={"secondary"} onPress={addTask}>
-        {editingTaskId ? "Update Task" : "Add Task"} {/* Update button text */}
+        {editingTaskId ? "Update Task" : "Add Task"}
       </ThemedButton>
 
-      <FlatList
-        className="max-h-[60vh]"
-        data={tasks}
-        renderItem={(t) => <RenderTask item={t.item} removeTask={removeTask} updateTask={updateTask} />}
-      />
+      {tasks.length === 0 && (
+        <ThemedText className="mt-4" type="subtitle">
+          No active tasks
+        </ThemedText>
+      )}
+      {loading ? (
+        <ActivityIndicator size="large" color="#0000ff" />
+      ) : (
+        <View>
+          <FlatList
+            className="max-h-[30vh]"
+            data={tasks.filter((task) => !task.completed)}
+            renderItem={(t) => <TaskItem item={t.item} removeTask={removeTask} updateTask={updateTask} toggleTaskCompletion={toggleTaskCompletion} />}
+          />
+        </View>
+      )}
     </ThemedView>
   );
 };
 
-export default Todos;
-
-const RenderTask = ({
-  item,
-  removeTask,
-  updateTask,
-}: {
-  item: { id: string; title: string };
-  removeTask: (id: string) => void;
-  updateTask: (id: string) => void;
-}) => {
-  return (
-    <View
-      className="flex-row justify-between items-center"
-      style={{
-        padding: 10,
-        marginVertical: 10,
-        borderWidth: 1,
-        borderStyle: "solid",
-        borderColor: "#ccc",
-        borderRadius: 5,
-      }}
-    >
-      <ThemedText>{item.title}</ThemedText>
-      <View className="flex-row">
-        <ThemedButton className="px-2" variant="ghost">
-          <FontAwesome size={20} name="pencil" color={Colors.common.blue} onPress={() => updateTask(item.id)} />
-        </ThemedButton>
-        <ThemedButton className="px-2" variant="ghost">
-          <FontAwesome size={20} name="trash" color={Colors.common.red} onPress={() => removeTask(item.id)} />
-        </ThemedButton>
-      </View>
-    </View>
-  );
-};
+export default Tasks;
