@@ -37,5 +37,6 @@ export const Colors = {
   common: {
     red: "#ff0000",
     blue: "#00bfff",
+    green: "#008000",
   },
 };
